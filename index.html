@@ -1,65 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Settings, Plus, Trash2, Edit2, Check, X, Search, Calendar, RefreshCcw, Users, BookOpen } from 'lucide-react';
-
-// --- Firebase 初始化 ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'hw-checklist-app';
-
-// --- 狀態與顏色定義 ---
-const STATUS = {
-  NONE: 'none',
-  SUBMITTED: 'submitted',
-  CORRECTION: 'correction',
-  MISSING: 'missing'
-};
-
-const NEXT_STATUS = {
-  [STATUS.NONE]: STATUS.SUBMITTED,
-  [STATUS.SUBMITTED]: STATUS.CORRECTION,
-  [STATUS.CORRECTION]: STATUS.MISSING,
-  [STATUS.MISSING]: STATUS.NONE
-};
-
-const STATUS_STYLE = {
-  [STATUS.NONE]: 'bg-white text-gray-400 hover:bg-[#bae1ff] hover:text-blue-700 border-4 border-dotted border-gray-200',
-  [STATUS.SUBMITTED]: 'bg-[#baffc9] text-green-800 hover:bg-[#a0f0b0] border-4 border-dotted border-[#8be09d] shadow-sm',
-  [STATUS.CORRECTION]: 'bg-[#ffffba] text-yellow-800 hover:bg-[#f0f0a0] border-4 border-dotted border-[#e0e08b] shadow-sm',
-  [STATUS.MISSING]: 'bg-[#ffb3ba] text-red-800 hover:bg-[#f0a0a8] border-4 border-dotted border-[#e08b96] shadow-sm'
-};
-
-const STATUS_LABEL = {
-  [STATUS.NONE]: '未標記',
-  [STATUS.SUBMITTED]: '已交',
-  [STATUS.CORRECTION]: '需訂正',
-  [STATUS.MISSING]: '未交'
-};
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [studentCount, setStudentCount] = useState(0);
-  const [tempStudentCount, setTempStudentCount] = useState('');
-  const [homeworks, setHomeworks] = useState([]);
-  const [newHwName, setNewHwName] = useState('');
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學生作業檢查表</title>
   
-  // 查詢狀態
-  const [queryMode, setQueryMode] = useState('none'); // 'none', 'seat', 'period'
-  const [querySeat, setQuerySeat] = useState('');
-  const [queryStartDate, setQueryStartDate] = useState('');
-  const [queryEndDate, setQueryEndDate] = useState('');
+  <!-- 引入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- 引入字體 (芫荽體 + Klee One) -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap');
 
-  // 當前日期
-  const todayString = new Date().toLocaleDateString('zh-TW', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
-  });
+    @font-face {
+      font-family: 'Iansui';
+      src: url('https://cdn.jsdelivr.net/gh/ButTaiwan/iansui@master/Iansui-Regular.ttf') format('truetype');
+      font-weight: normal;
+      font-display: swap;
+    }
 
-  // --- Firebase 驗證 ---
-  useEffect(() => {
+    * {
+      font-family: 'Iansui', 'Klee One', 'Noto Sans TC', sans-serif !important;
+    }
+    
+    body {
+      background-color: #dcf3f8;
+      color: #1f2937;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .bg-grid {
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.8) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.8) 2px, transparent 2px);
+      background-size: 50px 50px;
+    }
+    
+    .rainbow-tr {
+      position: fixed; top: -100px; right: -100px; width: 400px; height: 400px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 30px #ffb3ba, inset 0 0 0 60px #ffdfba, inset 0 0 0 90px #ffffba, inset 0 0 0 120px #baffc9, inset 0 0 0 150px #bae1ff, inset 0 0 0 180px #d4c4fb;
+      opacity: 0.8; pointer-events: none; z-index: 0;
+    }
+    
+    .rainbow-bl {
+      position: fixed; bottom: -100px; left: -100px; width: 400px; height: 400px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 30px #d4c4fb, inset 0 0 0 60px #bae1ff, inset 0 0 0 90px #baffc9, inset 0 0 0 120px #ffffba, inset 0 0 0 150px #ffdfba, inset 0 0 0 180px #ffb3ba;
+      opacity: 0.8; pointer-events: none; z-index: 0;
+    }
+    
+    .dot-border-top {
+      position: fixed; top: 20px; left: 100px; right: 100px;
+      border-top: 8px dashed #ffdfba; opacity: 0.7; pointer-events: none; z-index: 0;
+    }
+  </style>
+</head>
+<body class="pb-24">
+
+  <!-- 背景裝飾 -->
+  <div class="fixed inset-0 bg-grid pointer-events-none z-0"></div>
+  <div class="rainbow-tr"></div>
+  <div class="rainbow-bl"></div>
+  <div class="dot-border-top hidden md:block"></div>
+
+  <!-- 主要內容容器 -->
+  <div id="app-root" class="relative z-10">
+    <!-- 畫面由 JavaScript 動態渲染 -->
+    <div class="flex justify-center items-center h-screen">
+      <div class="text-xl font-bold text-[#bae1ff] bg-white/80 px-6 py-3 rounded-2xl animate-pulse">
+        系統載入中...
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase 邏輯與介面渲染 -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+    import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+    // =========================================================================
+    // ⚠️ 第 1 步：這裡設定你的 Firebase 資料庫 (請替換為你從 Firebase 控制台取得的設定)
+    // =========================================================================
+  const firebaseConfig = {
+  apiKey: "AIzaSyCVMsCHQyve4RI1uqPu89f39wpEsDnrAiw",
+  authDomain: "homework-e9e3c.firebaseapp.com",
+  projectId: "homework-e9e3c",
+  storageBucket: "homework-e9e3c.firebasestorage.app",
+  messagingSenderId: "1067149836853",
+  appId: "1:1067149836853:web:38927516dd97d8ff38e77c"
+};
+    // =========================================================================
+
+    // (此處保留環境變數判斷，讓你在這個畫布中預覽也能正常運作，自己部署時會自動使用上方你填寫的設定)
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : myFirebaseConfig;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'hw-checklist-app';
+
+    // --- 初始化 Firebase ---
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // --- 狀態定義 ---
+    const STATUS = { NONE: 'none', SUBMITTED: 'submitted', CORRECTION: 'correction', MISSING: 'missing' };
+    const NEXT_STATUS = {
+      [STATUS.NONE]: STATUS.SUBMITTED,
+      [STATUS.SUBMITTED]: STATUS.CORRECTION,
+      [STATUS.CORRECTION]: STATUS.MISSING,
+      [STATUS.MISSING]: STATUS.NONE
+    };
+
+    const STATUS_STYLE = {
+      [STATUS.NONE]: 'bg-white text-gray-400 hover:bg-[#bae1ff] hover:text-blue-700 border-4 border-dotted border-gray-200',
+      [STATUS.SUBMITTED]: 'bg-[#baffc9] text-green-800 hover:bg-[#a0f0b0] border-4 border-dotted border-[#8be09d] shadow-sm',
+      [STATUS.CORRECTION]: 'bg-[#ffffba] text-yellow-800 hover:bg-[#f0f0a0] border-4 border-dotted border-[#e0e08b] shadow-sm',
+      [STATUS.MISSING]: 'bg-[#ffb3ba] text-red-800 hover:bg-[#f0a0a8] border-4 border-dotted border-[#e08b96] shadow-sm'
+    };
+
+    const STATUS_LABEL = {
+      [STATUS.NONE]: '未標記', [STATUS.SUBMITTED]: '已交', [STATUS.CORRECTION]: '需訂正', [STATUS.MISSING]: '未交'
+    };
+
+    // --- 全域狀態管理 ---
+    window.state = {
+      user: null,
+      studentCount: 0,
+      tempStudentCount: '',
+      homeworks: [],
+      newHwName: '',
+      queryMode: 'none', // 'none', 'seat', 'period'
+      querySeat: '',
+      queryStartDate: '',
+      queryEndDate: '',
+      editingHwId: null,
+      editingHwName: ''
+    };
+
+    // --- Firebase 驗證與資料監聽 ---
+    let unsubSettings = null;
+    let unsubHw = null;
+
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -71,530 +160,419 @@ export default function App() {
         console.error("Auth error:", error);
       }
     };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
 
-  // --- 載入資料 (學生人數與作業列表) ---
-  useEffect(() => {
-    if (!user) return;
+    onAuthStateChanged(auth, (user) => {
+      window.state.user = user;
+      render();
 
-    // 1. 監聽學生人數設定
-    const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'general');
-    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists() && docSnap.data().studentCount) {
-        setStudentCount(docSnap.data().studentCount);
-        setTempStudentCount(docSnap.data().studentCount.toString());
+      if (user) {
+        // 監聽學生人數
+        const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'general');
+        unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+          if (docSnap.exists() && docSnap.data().studentCount) {
+            window.state.studentCount = docSnap.data().studentCount;
+            window.state.tempStudentCount = docSnap.data().studentCount.toString();
+            render();
+          }
+        });
+
+        // 監聽作業列表
+        const hwCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'homeworks');
+        unsubHw = onSnapshot(hwCollection, (snapshot) => {
+          const hwData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          hwData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          window.state.homeworks = hwData;
+          render();
+        });
+      } else {
+        if (unsubSettings) unsubSettings();
+        if (unsubHw) unsubHw();
       }
-    }, (err) => console.error("Error fetching settings:", err));
+    });
 
-    // 2. 監聽作業列表
-    const hwCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'homeworks');
-    const unsubHw = onSnapshot(hwCollection, (snapshot) => {
-      const hwData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // 記憶體內排序 (避免複雜的 Firestore 查詢)
-      hwData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setHomeworks(hwData);
-    }, (err) => console.error("Error fetching homeworks:", err));
+    initAuth();
 
-    return () => {
-      unsubSettings();
-      unsubHw();
+    // --- 動作處理函式 (綁定在 window 上供 HTML 呼叫) ---
+    
+    window.handleInputChange = (field, value) => {
+      window.state[field] = value;
+      // 不重新 render，保持輸入框焦點
     };
-  }, [user]);
 
-  // --- 處理功能 ---
+    window.setQueryMode = (mode) => {
+      window.state.queryMode = window.state.queryMode === mode ? 'none' : mode;
+      render();
+    };
 
-  const handleSaveStudentCount = async () => {
-    if (!user) return;
-    const count = parseInt(tempStudentCount, 10);
-    if (isNaN(count) || count < 1 || count > 100) {
-      alert("請輸入有效的學生人數 (1-100)");
-      return;
-    }
-    const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'general');
-    await setDoc(settingsRef, { studentCount: count }, { merge: true });
-  };
+    window.handleSaveStudentCount = async () => {
+      const countInput = document.getElementById('tempStudentCount').value;
+      const count = parseInt(countInput, 10);
+      if (isNaN(count) || count < 1 || count > 100) {
+        alert("請輸入有效的學生人數 (1-100)");
+        return;
+      }
+      if (!window.state.user) return;
+      const settingsRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'settings', 'general');
+      await setDoc(settingsRef, { studentCount: count }, { merge: true });
+    };
 
-  const handleAddHomework = async (e) => {
-    e.preventDefault();
-    if (!user || !newHwName.trim()) return;
-    
-    if (studentCount === 0) {
-      alert("請先在左側設定學生人數！");
-      return;
-    }
+    window.handleAddHomework = async (e) => {
+      e.preventDefault();
+      const hwName = document.getElementById('newHwName').value.trim();
+      if (!window.state.user || !hwName) return;
+      
+      if (window.state.studentCount === 0) {
+        alert("請先在左側設定學生人數！");
+        return;
+      }
 
-    const hwCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'homeworks');
-    await addDoc(hwCollection, {
-      name: newHwName.trim(),
-      createdAt: new Date().toISOString(), // 用於排序和週期查詢
-      statuses: {} // 座號 -> 狀態 (空代表預設 NONE)
-    });
-    setNewHwName('');
-  };
-
-  const handleDeleteHomework = async (hwId) => {
-    if (!user || !window.confirm("確定要刪除這項作業嗎？")) return;
-    const hwRef = doc(db, 'artifacts', appId, 'users', user.uid, 'homeworks', hwId);
-    await deleteDoc(hwRef);
-  };
-
-  const handleUpdateHomeworkName = async (hwId, newName) => {
-    if (!user || !newName.trim()) return;
-    const hwRef = doc(db, 'artifacts', appId, 'users', user.uid, 'homeworks', hwId);
-    await updateDoc(hwRef, { name: newName.trim() });
-  };
-
-  const handleToggleStudentStatus = async (hwId, seatNo, currentStatuses) => {
-    if (!user) return;
-    const currentStatus = currentStatuses[seatNo] || STATUS.NONE;
-    const nextStatus = NEXT_STATUS[currentStatus];
-    
-    const hwRef = doc(db, 'artifacts', appId, 'users', user.uid, 'homeworks', hwId);
-    await updateDoc(hwRef, {
-      [`statuses.${seatNo}`]: nextStatus
-    });
-  };
-
-  const handleResetAll = async () => {
-    if (!user) return;
-    if (!window.confirm("⚠️ 警告：這將會清除「所有」的作業記錄！確定要繼續嗎？")) return;
-    if (!window.confirm("真的確定嗎？資料刪除後無法復原。")) return;
-
-    // 刪除所有作業文件
-    for (const hw of homeworks) {
-      const hwRef = doc(db, 'artifacts', appId, 'users', user.uid, 'homeworks', hw.id);
-      await deleteDoc(hwRef);
-    }
-  };
-
-  // --- 渲染組件 ---
-
-  const renderLeftPanel = () => (
-    <div className="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] p-6 flex flex-col gap-6 relative">
-      {/* 學生人數設定 */}
-      <div className="border-b-4 border-dotted border-gray-200 pb-6">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
-          <Users className="w-6 h-6 text-[#bae1ff]" /> 班級設定
-        </h2>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <input
-              type="number"
-              value={tempStudentCount}
-              onChange={(e) => setTempStudentCount(e.target.value)}
-              placeholder="輸入班級人數"
-              className="w-full pl-4 pr-4 py-3 border-4 border-dotted border-gray-200 rounded-2xl focus:outline-none focus:border-[#bae1ff] bg-white/50 text-lg"
-              min="1"
-            />
-            <span className="absolute right-4 top-3.5 text-gray-400">人</span>
-          </div>
-          <button 
-            onClick={handleSaveStudentCount}
-            className="px-5 py-3 bg-[#bae1ff] text-blue-800 rounded-2xl hover:bg-[#a0d0f0] transition-colors font-bold whitespace-nowrap border-2 border-transparent"
-          >
-            設定
-          </button>
-        </div>
-        {studentCount > 0 && (
-          <p className="mt-3 text-md text-[#6ab882] flex items-center gap-1 font-bold">
-            <Check className="w-5 h-5" /> 目前設定人數：{studentCount} 人
-          </p>
-        )}
-      </div>
-
-      {/* 查詢功能 */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
-          <Search className="w-6 h-6 text-[#d4c4fb]" /> 作業查詢
-        </h2>
-        <div className="flex bg-white/50 p-1.5 rounded-2xl mb-4 border-2 border-dotted border-gray-200">
-          <button 
-            onClick={() => setQueryMode(queryMode === 'seat' ? 'none' : 'seat')}
-            className={`flex-1 py-2 text-md font-bold rounded-xl transition-colors ${queryMode === 'seat' ? 'bg-[#d4c4fb] shadow-sm text-purple-900' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            座號查詢
-          </button>
-          <button 
-            onClick={() => setQueryMode(queryMode === 'period' ? 'none' : 'period')}
-            className={`flex-1 py-2 text-md font-bold rounded-xl transition-colors ${queryMode === 'period' ? 'bg-[#d4c4fb] shadow-sm text-purple-900' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            週期查詢
-          </button>
-        </div>
-
-        {/* 座號查詢表單 */}
-        {queryMode === 'seat' && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-200 bg-white/60 p-4 rounded-2xl border-4 border-dotted border-[#d4c4fb] mb-4">
-            <label className="block text-md text-gray-700 mb-2 font-bold">請輸入座號</label>
-            <input
-              type="number"
-              value={querySeat}
-              onChange={(e) => setQuerySeat(e.target.value)}
-              placeholder="例如: 5"
-              className="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white text-lg"
-              min="1"
-            />
-          </div>
-        )}
-
-        {/* 週期查詢表單 */}
-        {queryMode === 'period' && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-200 space-y-4 bg-white/60 p-4 rounded-2xl border-4 border-dotted border-[#d4c4fb] mb-4">
-            <div>
-              <label className="block text-md text-gray-700 mb-2 font-bold">開始日期</label>
-              <input
-                type="date"
-                value={queryStartDate}
-                onChange={(e) => setQueryStartDate(e.target.value)}
-                className="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white"
-              />
-            </div>
-            <div>
-              <label className="block text-md text-gray-700 mb-2 font-bold">結束日期</label>
-              <input
-                type="date"
-                value={queryEndDate}
-                onChange={(e) => setQueryEndDate(e.target.value)}
-                className="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 狀態圖例 */}
-        <div className="mt-6 pt-6 border-t-4 border-dotted border-gray-200">
-          <h3 className="text-lg font-bold text-gray-700 mb-4">按鈕顏色圖例</h3>
-          <div className="grid grid-cols-2 gap-4 text-md font-bold">
-            <div className="flex items-center gap-3">
-              <span className={`w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.SUBMITTED]}`}></span>
-              <span className="text-gray-700">已繳交</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.CORRECTION]}`}></span>
-              <span className="text-gray-700">需訂正</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.MISSING]}`}></span>
-              <span className="text-gray-700">未繳交</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.NONE]}`}></span>
-              <span className="text-gray-700">未標記</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderHomeworkCard = (hw) => {
-    return (
-      <HomeworkItem 
-        key={hw.id}
-        hw={hw}
-        studentCount={studentCount}
-        onDelete={() => handleDeleteHomework(hw.id)}
-        onUpdateName={(newName) => handleUpdateHomeworkName(hw.id, newName)}
-        onToggleStatus={(seatNo) => handleToggleStudentStatus(hw.id, seatNo, hw.statuses)}
-      />
-    );
-  };
-
-  const renderRightPanel = () => {
-    // 根據查詢過濾資料
-    let displayedHomeworks = homeworks;
-    
-    if (queryMode === 'period' && queryStartDate && queryEndDate) {
-      const start = new Date(queryStartDate).setHours(0,0,0,0);
-      const end = new Date(queryEndDate).setHours(23,59,59,999);
-      displayedHomeworks = homeworks.filter(hw => {
-        const hwTime = new Date(hw.createdAt).getTime();
-        return hwTime >= start && hwTime <= end;
+      const hwCollection = collection(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks');
+      await addDoc(hwCollection, {
+        name: hwName,
+        createdAt: new Date().toISOString(),
+        statuses: {}
       });
-    }
+      window.state.newHwName = '';
+      render();
+    };
 
-    // 若為座號查詢，且有輸入座號
-    if (queryMode === 'seat' && querySeat) {
-      const seatNoStr = querySeat.toString();
-      return (
-        <div className="space-y-6">
-          <div className="bg-[#d4c4fb]/30 text-purple-900 p-5 rounded-[32px] font-bold text-lg flex items-center gap-3 border-4 border-dashed border-[#d4c4fb]">
-            <Search className="w-6 h-6" />
-            正在查詢座號：<span className="text-2xl text-purple-700 bg-white/60 px-3 py-1 rounded-xl">{querySeat}</span> 號的作業狀況
-          </div>
-          <div className="bg-white/80 backdrop-blur-sm rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] overflow-hidden">
-            <table className="w-full text-left text-lg">
-              <thead className="bg-[#bae1ff]/30 border-b-4 border-dashed border-[#bae1ff]">
-                <tr>
-                  <th className="p-5 font-bold text-gray-700">作業名稱</th>
-                  <th className="p-5 font-bold text-gray-700">日期</th>
-                  <th className="p-5 font-bold text-gray-700">繳交狀態</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y-4 divide-dashed divide-gray-100">
-                {homeworks.map(hw => {
-                  const status = hw.statuses[seatNoStr] || STATUS.NONE;
-                  return (
-                    <tr key={hw.id} className="hover:bg-white/60 transition-colors">
-                      <td className="p-5 font-bold text-gray-800">{hw.name}</td>
-                      <td className="p-5 text-gray-500">{new Date(hw.createdAt).toLocaleDateString('zh-TW')}</td>
-                      <td className="p-5">
-                        <span className={`px-4 py-2 text-md rounded-2xl font-bold border-2 ${
-                          status === STATUS.SUBMITTED ? 'bg-[#baffc9] text-green-800 border-[#8be09d]' :
-                          status === STATUS.CORRECTION ? 'bg-[#ffffba] text-yellow-800 border-[#e0e08b]' :
-                          status === STATUS.MISSING ? 'bg-[#ffb3ba] text-red-800 border-[#e08b96]' :
-                          'bg-gray-100 text-gray-600 border-gray-200'
-                        }`}>
-                          {STATUS_LABEL[status]}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {homeworks.length === 0 && (
-                  <tr><td colSpan="3" className="p-8 text-center text-gray-500 font-bold">目前沒有任何作業記錄</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    }
+    window.handleDeleteHomework = async (hwId) => {
+      if (!window.state.user || !window.confirm("確定要刪除這項作業嗎？")) return;
+      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+      await deleteDoc(hwRef);
+    };
 
-    // 預設或週期查詢顯示
-    return (
-      <div className="space-y-8">
-        {/* 新增作業區域 */}
-        <div className="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#baffc9] p-6">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
-            <BookOpen className="w-6 h-6 text-[#6ab882]" /> 新增作業
-          </h2>
-          <form onSubmit={handleAddHomework} className="flex gap-4">
-            <input
-              type="text"
-              value={newHwName}
-              onChange={(e) => setNewHwName(e.target.value)}
-              placeholder="輸入作業名稱 (例如：國語習作 CH5)"
-              className="flex-1 px-5 py-3 border-4 border-dotted border-gray-200 rounded-2xl focus:outline-none focus:border-[#baffc9] text-gray-800 text-lg bg-white/50"
-              required
-            />
-            <button 
-              type="submit"
-              className="px-6 py-3 bg-[#baffc9] text-green-800 rounded-2xl hover:bg-[#a0f0b0] transition-colors font-bold flex items-center gap-2 whitespace-nowrap text-lg shadow-sm"
-            >
-              <Plus className="w-6 h-6" /> 新增
-            </button>
-          </form>
-          {studentCount === 0 && (
-            <p className="mt-3 text-md text-red-500 font-bold">※ 請先在左側設定班級學生人數，才能新增作業。</p>
-          )}
-        </div>
+    window.startEditName = (hwId, currentName) => {
+      window.state.editingHwId = hwId;
+      window.state.editingHwName = currentName;
+      render();
+      setTimeout(() => document.getElementById(`edit-input-${hwId}`).focus(), 0);
+    };
 
-        {/* 週期查詢提示 */}
-        {queryMode === 'period' && (
-          <div className="bg-[#ffffba]/50 text-yellow-800 p-4 rounded-2xl font-bold text-md flex items-center gap-2 border-4 border-dashed border-[#ffffba]">
-            <Calendar className="w-5 h-5" />
-            顯示 {queryStartDate || '最早'} 到 {queryEndDate || '最晚'} 的作業記錄
-          </div>
-        )}
+    window.saveEditName = async (hwId) => {
+      const newName = window.state.editingHwName.trim();
+      window.state.editingHwId = null;
+      render(); // 關閉編輯模式
 
-        {/* 作業列表 */}
-        <div className="space-y-6">
-          {displayedHomeworks.length === 0 ? (
-            <div className="text-center py-16 bg-white/60 rounded-[32px] border-4 border-dashed border-gray-300">
-              <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-bold text-xl">目前沒有符合的作業記錄</p>
+      if (!window.state.user || !newName) return;
+      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+      await updateDoc(hwRef, { name: newName });
+    };
+
+    window.handleEditKeyDown = (e, hwId) => {
+      if (e.key === 'Enter') window.saveEditName(hwId);
+      if (e.key === 'Escape') {
+        window.state.editingHwId = null;
+        render();
+      }
+    };
+
+    window.handleToggleStudentStatus = async (hwId, seatNo) => {
+      if (!window.state.user) return;
+      const hw = window.state.homeworks.find(h => h.id === hwId);
+      if (!hw) return;
+      
+      const currentStatus = hw.statuses[seatNo] || STATUS.NONE;
+      const nextStatus = NEXT_STATUS[currentStatus];
+      
+      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+      await updateDoc(hwRef, {
+        [`statuses.${seatNo}`]: nextStatus
+      });
+    };
+
+    window.handleResetAll = async () => {
+      if (!window.state.user) return;
+      if (!window.confirm("⚠️ 警告：這將會清除「所有」的作業記錄！確定要繼續嗎？")) return;
+      if (!window.confirm("真的確定嗎？資料刪除後無法復原。")) return;
+
+      for (const hw of window.state.homeworks) {
+        const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hw.id);
+        await deleteDoc(hwRef);
+      }
+    };
+
+    // --- HTML 渲染邏輯 ---
+    const getTodayString = () => {
+      return new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+    };
+
+    const render = () => {
+      const s = window.state;
+      const root = document.getElementById('app-root');
+
+      // 左側面板 HTML
+      const leftPanelHtml = `
+        <div class="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] p-6 flex flex-col gap-6 relative">
+          <!-- 班級設定 -->
+          <div class="border-b-4 border-dotted border-gray-200 pb-6">
+            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
+              <i data-lucide="users" class="w-6 h-6 text-[#bae1ff]"></i> 班級設定
+            </h2>
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <input type="number" id="tempStudentCount" value="${s.tempStudentCount}" 
+                  onchange="handleInputChange('tempStudentCount', this.value)"
+                  placeholder="輸入班級人數" 
+                  class="w-full pl-4 pr-4 py-3 border-4 border-dotted border-gray-200 rounded-2xl focus:outline-none focus:border-[#bae1ff] bg-white/50 text-lg" min="1" />
+                <span class="absolute right-4 top-3.5 text-gray-400">人</span>
+              </div>
+              <button onclick="handleSaveStudentCount()" class="px-5 py-3 bg-[#bae1ff] text-blue-800 rounded-2xl hover:bg-[#a0d0f0] transition-colors font-bold whitespace-nowrap border-2 border-transparent">
+                設定
+              </button>
             </div>
-          ) : (
-            displayedHomeworks.map(renderHomeworkCard)
-          )}
+            ${s.studentCount > 0 ? `
+              <p class="mt-3 text-md text-[#6ab882] flex items-center gap-1 font-bold">
+                <i data-lucide="check" class="w-5 h-5"></i> 目前設定人數：${s.studentCount} 人
+              </p>
+            ` : ''}
+          </div>
+
+          <!-- 作業查詢 -->
+          <div>
+            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
+              <i data-lucide="search" class="w-6 h-6 text-[#d4c4fb]"></i> 作業查詢
+            </h2>
+            <div class="flex bg-white/50 p-1.5 rounded-2xl mb-4 border-2 border-dotted border-gray-200">
+              <button onclick="setQueryMode('seat')" class="flex-1 py-2 text-md font-bold rounded-xl transition-colors ${s.queryMode === 'seat' ? 'bg-[#d4c4fb] shadow-sm text-purple-900' : 'text-gray-500 hover:text-gray-800'}">
+                座號查詢
+              </button>
+              <button onclick="setQueryMode('period')" class="flex-1 py-2 text-md font-bold rounded-xl transition-colors ${s.queryMode === 'period' ? 'bg-[#d4c4fb] shadow-sm text-purple-900' : 'text-gray-500 hover:text-gray-800'}">
+                週期查詢
+              </button>
+            </div>
+
+            <!-- 查詢表單區塊 -->
+            ${s.queryMode === 'seat' ? `
+              <div class="bg-white/60 p-4 rounded-2xl border-4 border-dotted border-[#d4c4fb] mb-4">
+                <label class="block text-md text-gray-700 mb-2 font-bold">請輸入座號</label>
+                <input type="number" value="${s.querySeat}" oninput="handleInputChange('querySeat', this.value); render();" placeholder="例如: 5" class="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white text-lg" min="1" />
+              </div>
+            ` : ''}
+
+            ${s.queryMode === 'period' ? `
+              <div class="space-y-4 bg-white/60 p-4 rounded-2xl border-4 border-dotted border-[#d4c4fb] mb-4">
+                <div>
+                  <label class="block text-md text-gray-700 mb-2 font-bold">開始日期</label>
+                  <input type="date" value="${s.queryStartDate}" onchange="handleInputChange('queryStartDate', this.value); render();" class="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white" />
+                </div>
+                <div>
+                  <label class="block text-md text-gray-700 mb-2 font-bold">結束日期</label>
+                  <input type="date" value="${s.queryEndDate}" onchange="handleInputChange('queryEndDate', this.value); render();" class="w-full px-4 py-2 border-4 border-dotted border-gray-200 rounded-xl focus:outline-none focus:border-[#d4c4fb] bg-white" />
+                </div>
+              </div>
+            ` : ''}
+
+            <!-- 圖例 -->
+            <div class="mt-6 pt-6 border-t-4 border-dotted border-gray-200">
+              <h3 class="text-lg font-bold text-gray-700 mb-4">按鈕顏色圖例</h3>
+              <div class="grid grid-cols-2 gap-4 text-md font-bold">
+                <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.SUBMITTED]}"></span><span class="text-gray-700">已繳交</span></div>
+                <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.CORRECTION]}"></span><span class="text-gray-700">需訂正</span></div>
+                <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.MISSING]}"></span><span class="text-gray-700">未繳交</span></div>
+                <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-full ${STATUS_STYLE[STATUS.NONE]}"></span><span class="text-gray-700">未標記</span></div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    );
-  };
+      `;
 
-  return (
-    <div className="min-h-screen bg-[#dcf3f8] text-gray-800 pb-24 relative overflow-hidden">
-      <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap');
+      // 右側面板邏輯與 HTML
+      let displayedHomeworks = s.homeworks;
+      let rightPanelHtml = '';
 
-        @font-face {
-          font-family: 'Iansui';
-          src: url('https://cdn.jsdelivr.net/gh/ButTaiwan/iansui@master/Iansui-Regular.ttf') format('truetype');
-          font-weight: normal;
-          font-display: swap;
-        }
+      if (s.queryMode === 'period' && s.queryStartDate && s.queryEndDate) {
+        const start = new Date(s.queryStartDate).setHours(0,0,0,0);
+        const end = new Date(s.queryEndDate).setHours(23,59,59,999);
+        displayedHomeworks = s.homeworks.filter(hw => {
+          const hwTime = new Date(hw.createdAt).getTime();
+          return hwTime >= start && hwTime <= end;
+        });
+      }
 
-        * {
-          font-family: 'Iansui', 'Klee One', 'Noto Sans TC', sans-serif !important;
-        }
+      if (s.queryMode === 'seat' && s.querySeat) {
+        const seatNoStr = s.querySeat.toString();
         
-        .bg-grid {
-          background-image: 
-            linear-gradient(rgba(255, 255, 255, 0.8) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.8) 2px, transparent 2px);
-          background-size: 50px 50px;
-        }
-        .rainbow-tr {
-          position: absolute; top: -100px; right: -100px; width: 400px; height: 400px;
-          border-radius: 50%;
-          box-shadow: inset 0 0 0 30px #ffb3ba, inset 0 0 0 60px #ffdfba, inset 0 0 0 90px #ffffba, inset 0 0 0 120px #baffc9, inset 0 0 0 150px #bae1ff, inset 0 0 0 180px #d4c4fb;
-          opacity: 0.8; pointer-events: none;
-        }
-        .rainbow-bl {
-          position: fixed; bottom: -100px; left: -100px; width: 400px; height: 400px;
-          border-radius: 50%;
-          box-shadow: inset 0 0 0 30px #d4c4fb, inset 0 0 0 60px #bae1ff, inset 0 0 0 90px #baffc9, inset 0 0 0 120px #ffffba, inset 0 0 0 150px #ffdfba, inset 0 0 0 180px #ffb3ba;
-          opacity: 0.8; pointer-events: none;
-        }
-        .dot-border-top {
-          position: absolute; top: 20px; left: 100px; right: 100px;
-          border-top: 8px dashed #ffdfba; opacity: 0.7; pointer-events: none;
-        }
-      `}} />
-      <div className="absolute inset-0 bg-grid pointer-events-none z-0 fixed"></div>
-      <div className="rainbow-tr fixed z-0"></div>
-      <div className="rainbow-bl fixed z-0"></div>
-      <div className="dot-border-top fixed z-0 hidden md:block"></div>
+        let trs = displayedHomeworks.map(hw => {
+          const status = hw.statuses[seatNoStr] || STATUS.NONE;
+          const statusClass = 
+            status === STATUS.SUBMITTED ? 'bg-[#baffc9] text-green-800 border-[#8be09d]' :
+            status === STATUS.CORRECTION ? 'bg-[#ffffba] text-yellow-800 border-[#e0e08b]' :
+            status === STATUS.MISSING ? 'bg-[#ffb3ba] text-red-800 border-[#e08b96]' :
+            'bg-gray-100 text-gray-600 border-gray-200';
+            
+          return `
+            <tr class="hover:bg-white/60 transition-colors">
+              <td class="p-5 font-bold text-gray-800">${hw.name}</td>
+              <td class="p-5 text-gray-500">${new Date(hw.createdAt).toLocaleDateString('zh-TW')}</td>
+              <td class="p-5">
+                <span class="px-4 py-2 text-md rounded-2xl font-bold border-2 ${statusClass}">${STATUS_LABEL[status]}</span>
+              </td>
+            </tr>
+          `;
+        }).join('');
 
-      <div className="relative z-10">
-        {/* Header */}
-        <header className="bg-white/70 backdrop-blur-md border-b-4 border-dashed border-[#ffb3ba] sticky top-4 z-20 rounded-3xl mx-4 md:mx-auto max-w-6xl mt-4 shadow-sm">
-          <div className="px-6 py-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        if (displayedHomeworks.length === 0) {
+          trs = `<tr><td colspan="3" class="p-8 text-center text-gray-500 font-bold">目前沒有任何作業記錄</td></tr>`;
+        }
+
+        rightPanelHtml = `
+          <div class="space-y-6">
+            <div class="bg-[#d4c4fb]/30 text-purple-900 p-5 rounded-[32px] font-bold text-lg flex items-center gap-3 border-4 border-dashed border-[#d4c4fb]">
+              <i data-lucide="search" class="w-6 h-6"></i>
+              正在查詢座號：<span class="text-2xl text-purple-700 bg-white/60 px-3 py-1 rounded-xl">${s.querySeat}</span> 號的作業狀況
+            </div>
+            <div class="bg-white/80 backdrop-blur-sm rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] overflow-hidden">
+              <table class="w-full text-left text-lg">
+                <thead class="bg-[#bae1ff]/30 border-b-4 border-dashed border-[#bae1ff]">
+                  <tr>
+                    <th class="p-5 font-bold text-gray-700">作業名稱</th>
+                    <th class="p-5 font-bold text-gray-700">日期</th>
+                    <th class="p-5 font-bold text-gray-700">繳交狀態</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y-4 divide-dashed divide-gray-100">
+                  ${trs}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else {
+        // 預設或週期查詢顯示 (卡片列表)
+        let cardsHtml = '';
+        if (displayedHomeworks.length === 0) {
+          cardsHtml = `
+            <div class="text-center py-16 bg-white/60 rounded-[32px] border-4 border-dashed border-gray-300">
+              <i data-lucide="book-open" class="w-16 h-16 text-gray-300 mx-auto mb-4 block"></i>
+              <p class="text-gray-500 font-bold text-xl">目前沒有符合的作業記錄</p>
+            </div>
+          `;
+        } else {
+          cardsHtml = displayedHomeworks.map(hw => {
+            const seatsArray = Array.from({ length: s.studentCount }, (_, i) => i + 1);
+            const seatsHtml = seatsArray.map(seatNo => {
+              const status = hw.statuses[seatNo] || STATUS.NONE;
+              return `
+                <button onclick="handleToggleStudentStatus('${hw.id}', '${seatNo}')" title="座號 ${seatNo}：${STATUS_LABEL[status]}" class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-all duration-300 ${STATUS_STYLE[status]} transform hover:scale-110 focus:outline-none shadow-sm hover:shadow-md">
+                  ${seatNo}
+                </button>
+              `;
+            }).join('');
+
+            const titleArea = s.editingHwId === hw.id ? `
+              <div class="flex items-center gap-2 w-full">
+                <input type="text" id="edit-input-${hw.id}" value="${s.editingHwName}" 
+                  oninput="handleInputChange('editingHwName', this.value)"
+                  onkeydown="handleEditKeyDown(event, '${hw.id}')"
+                  onblur="saveEditName('${hw.id}')"
+                  class="w-full px-3 py-1 text-2xl font-bold border-b-4 border-[#ffdfba] focus:outline-none bg-transparent" />
+              </div>
+            ` : `
+              <div class="flex items-center gap-3">
+                <h3 class="text-2xl font-bold text-gray-800">${hw.name}</h3>
+                <span class="text-sm font-bold text-gray-500 bg-white/80 px-3 py-1 rounded-xl border-2 border-dashed border-gray-200">
+                  ${new Date(hw.createdAt).toLocaleDateString('zh-TW')}
+                </span>
+                <button onclick="startEditName('${hw.id}', '${hw.name}')" class="text-gray-400 hover:text-[#ffdfba] opacity-0 group-hover:opacity-100 transition-opacity bg-white p-2 rounded-full shadow-sm" title="編輯名稱">
+                  <i data-lucide="edit-2" class="w-5 h-5"></i>
+                </button>
+              </div>
+            `;
+
+            return `
+              <div class="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#ffdfba] overflow-hidden">
+                <div class="bg-white/50 px-6 py-4 border-b-4 border-dotted border-[#ffdfba] flex items-center justify-between group">
+                  <div class="flex-1 mr-4">
+                    ${titleArea}
+                  </div>
+                  <button onclick="handleDeleteHomework('${hw.id}')" class="text-gray-400 hover:text-[#ffb3ba] transition-colors p-2 bg-white rounded-full shadow-sm hover:shadow-md opacity-0 group-hover:opacity-100" title="刪除此作業">
+                    <i data-lucide="trash-2" class="w-6 h-6"></i>
+                  </button>
+                </div>
+                <div class="p-6">
+                  <div class="flex flex-wrap gap-4">
+                    ${seatsHtml}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        rightPanelHtml = `
+          <div class="space-y-8">
+            <!-- 新增作業 -->
+            <div class="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#baffc9] p-6">
+              <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+                <i data-lucide="book-open" class="w-6 h-6 text-[#6ab882]"></i> 新增作業
+              </h2>
+              <form onsubmit="handleAddHomework(event)" class="flex gap-4">
+                <input type="text" id="newHwName" value="${s.newHwName}" oninput="handleInputChange('newHwName', this.value)" placeholder="輸入作業名稱 (例如：國語習作 CH5)" class="flex-1 px-5 py-3 border-4 border-dotted border-gray-200 rounded-2xl focus:outline-none focus:border-[#baffc9] text-gray-800 text-lg bg-white/50" required />
+                <button type="submit" class="px-6 py-3 bg-[#baffc9] text-green-800 rounded-2xl hover:bg-[#a0f0b0] transition-colors font-bold flex items-center gap-2 whitespace-nowrap text-lg shadow-sm">
+                  <i data-lucide="plus" class="w-6 h-6"></i> 新增
+                </button>
+              </form>
+              ${s.studentCount === 0 ? `<p class="mt-3 text-md text-red-500 font-bold">※ 請先在左側設定班級學生人數，才能新增作業。</p>` : ''}
+            </div>
+
+            <!-- 週期查詢提示 -->
+            ${s.queryMode === 'period' ? `
+              <div class="bg-[#ffffba]/50 text-yellow-800 p-4 rounded-2xl font-bold text-md flex items-center gap-2 border-4 border-dashed border-[#ffffba]">
+                <i data-lucide="calendar" class="w-5 h-5"></i>
+                顯示 ${s.queryStartDate || '最早'} 到 ${s.queryEndDate || '最晚'} 的作業記錄
+              </div>
+            ` : ''}
+
+            <!-- 卡片列表 -->
+            <div class="space-y-6">
+              ${cardsHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      // 整體組合 HTML
+      root.innerHTML = `
+        <header class="bg-white/70 backdrop-blur-md border-b-4 border-dashed border-[#ffb3ba] sticky top-4 z-20 rounded-3xl mx-4 md:mx-auto max-w-6xl mt-4 shadow-sm">
+          <div class="px-6 py-5">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-800 flex items-center gap-3">
-                  <span className="bg-[#ffb3ba] text-white p-2 rounded-2xl shadow-sm transform -rotate-6">
-                    <Check className="w-8 h-8" />
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800 flex items-center gap-3">
+                  <span class="bg-[#ffb3ba] text-white p-2 rounded-2xl shadow-sm transform -rotate-6">
+                    <i data-lucide="check" class="w-8 h-8"></i>
                   </span>
                   學生作業檢查表
                 </h1>
-                <p className="text-gray-600 mt-2 flex items-center gap-2 font-bold text-lg">
-                  <Calendar className="w-5 h-5 text-[#d4c4fb]" /> {todayString}
+                <p class="text-gray-600 mt-2 flex items-center gap-2 font-bold text-lg">
+                  <i data-lucide="calendar" class="w-5 h-5 text-[#d4c4fb]"></i> ${getTodayString()}
                 </p>
               </div>
-              
-              {/* 載入中狀態 */}
-              {!user && <div className="text-md font-bold text-[#bae1ff] bg-white/80 px-4 py-2 rounded-2xl animate-pulse">連線中...</div>}
+              ${!s.user ? `<div class="text-md font-bold text-[#bae1ff] bg-white/80 px-4 py-2 rounded-2xl animate-pulse">連線中...</div>` : ''}
             </div>
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="max-w-6xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* 左側面板 (設定與查詢) */}
-            <div className="w-full md:w-1/3 shrink-0 md:sticky md:top-32">
-              {renderLeftPanel()}
+        <main class="max-w-6xl mx-auto px-4 py-8">
+          <div class="flex flex-col md:flex-row gap-8 items-start">
+            <div class="w-full md:w-1/3 shrink-0 md:sticky md:top-32">
+              ${leftPanelHtml}
             </div>
-
-            {/* 右側面板 (主要作業區) */}
-            <div className="w-full md:w-2/3">
-              {renderRightPanel()}
+            <div class="w-full md:w-2/3">
+              ${rightPanelHtml}
             </div>
           </div>
         </main>
 
-        {/* 重置按鈕 (右下角懸浮) */}
-        <button
-          onClick={handleResetAll}
-          className="fixed bottom-8 right-8 bg-[#ffb3ba] text-white hover:bg-red-400 border-4 border-white p-5 rounded-full shadow-xl transition-all duration-300 flex items-center justify-center group z-50"
-          title="清除所有作業記錄"
-        >
-          <RefreshCcw className="w-8 h-8 group-hover:rotate-180 transition-transform duration-500" />
+        <button onclick="handleResetAll()" class="fixed bottom-8 right-8 bg-[#ffb3ba] text-white hover:bg-red-400 border-4 border-white p-5 rounded-full shadow-xl transition-all duration-300 flex items-center justify-center group z-50" title="清除所有作業記錄">
+          <i data-lucide="refresh-ccw" class="w-8 h-8 group-hover:rotate-180 transition-transform duration-500"></i>
         </button>
-      </div>
-    </div>
-  );
-}
+      `;
 
-// --- 單個作業卡片組件 ---
-function HomeworkItem({ hw, studentCount, onDelete, onUpdateName, onToggleStatus }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(hw.name);
+      // 重新渲染 Lucide 圖標
+      lucide.createIcons();
+    };
 
-  const handleSaveName = () => {
-    onUpdateName(editName);
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleSaveName();
-    if (e.key === 'Escape') {
-      setEditName(hw.name);
-      setIsEditing(false);
-    }
-  };
-
-  // 產生座號陣列 [1, 2, ..., studentCount]
-  const seats = Array.from({ length: studentCount }, (_, i) => i + 1);
-
-  return (
-    <div className="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#ffdfba] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-      {/* 卡片標題區 */}
-      <div className="bg-white/50 px-6 py-4 border-b-4 border-dotted border-[#ffdfba] flex items-center justify-between group">
-        <div className="flex-1 mr-4">
-          {isEditing ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                autoFocus
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={handleSaveName}
-                className="w-full px-3 py-1 text-2xl font-bold border-b-4 border-[#ffdfba] focus:outline-none bg-transparent"
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <h3 className="text-2xl font-bold text-gray-800">{hw.name}</h3>
-              <span className="text-sm font-bold text-gray-500 bg-white/80 px-3 py-1 rounded-xl border-2 border-dashed border-gray-200">
-                {new Date(hw.createdAt).toLocaleDateString('zh-TW')}
-              </span>
-              <button 
-                onClick={() => setIsEditing(true)}
-                className="text-gray-400 hover:text-[#ffdfba] opacity-0 group-hover:opacity-100 transition-opacity bg-white p-2 rounded-full shadow-sm"
-                title="編輯名稱"
-              >
-                <Edit2 className="w-5 h-5" />
-              </button>
-            </div>
-          )}
-        </div>
-        
-        <button 
-          onClick={onDelete}
-          className="text-gray-400 hover:text-[#ffb3ba] transition-colors p-2 bg-white rounded-full shadow-sm hover:shadow-md opacity-0 group-hover:opacity-100"
-          title="刪除此作業"
-        >
-          <Trash2 className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* 座號按鈕區 */}
-      <div className="p-6">
-        <div className="flex flex-wrap gap-4">
-          {seats.map(seatNo => {
-            const status = hw.statuses[seatNo] || STATUS.NONE;
-            const styleClass = STATUS_STYLE[status];
-            
-            return (
-              <button
-                key={seatNo}
-                onClick={() => onToggleStatus(seatNo.toString())}
-                className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-all duration-300 ${styleClass} transform hover:scale-110 focus:outline-none shadow-sm hover:shadow-md`}
-                title={`座號 ${seatNo}：${STATUS_LABEL[status]}`}
-              >
-                {seatNo}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
+  </script>
+</body>
+</html>
