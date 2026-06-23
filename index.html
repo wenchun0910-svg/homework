@@ -5,25 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>學生作業檢查表</title>
   
+  <!-- 加入網頁小圖示，消除 favicon 404 錯誤 -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+  
   <!-- 引入 Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- 引入 Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   
-  <!-- 引入字體 (芫荽體 + Klee One) -->
+  <!-- 引入字體 (全面改用穩定的 Google Fonts: Klee One) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
+  
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap');
-
-    @font-face {
-      font-family: 'Iansui';
-      src: url('https://cdn.jsdelivr.net/gh/ButTaiwan/iansui@master/webfont/Iansui-Regular.woff2') format('woff2');
-      font-weight: normal;
-      font-display: swap;
-    }
-
     * {
-      font-family: 'Iansui', 'Klee One', 'Noto Sans TC', sans-serif !important;
+      font-family: 'Klee One', 'Noto Sans TC', sans-serif !important;
     }
     
     body {
@@ -97,6 +95,7 @@
   messagingSenderId: "1067149836853",
   appId: "1:1067149836853:web:38927516dd97d8ff38e77c"
     };
+
     // =========================================================================
 
     // (此處保留環境變數判斷，讓你在這個畫布中預覽也能正常運作，自己部署時會自動使用上方你填寫的設定)
@@ -174,6 +173,8 @@
             window.state.tempStudentCount = docSnap.data().studentCount.toString();
             render();
           }
+        }, (error) => {
+           console.error("權限錯誤或其他錯誤 (人數):", error);
         });
 
         // 監聽作業列表
@@ -183,6 +184,8 @@
           hwData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           window.state.homeworks = hwData;
           render();
+        }, (error) => {
+           console.error("權限錯誤或其他錯誤 (作業):", error);
         });
       } else {
         if (unsubSettings) unsubSettings();
@@ -196,7 +199,6 @@
     
     window.handleInputChange = (field, value) => {
       window.state[field] = value;
-      // 不重新 render，保持輸入框焦點
     };
 
     window.setQueryMode = (mode) => {
@@ -212,8 +214,13 @@
         return;
       }
       if (!window.state.user) return;
-      const settingsRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'settings', 'general');
-      await setDoc(settingsRef, { studentCount: count }, { merge: true });
+      try {
+        const settingsRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'settings', 'general');
+        await setDoc(settingsRef, { studentCount: count }, { merge: true });
+      } catch (e) {
+        console.error("儲存失敗:", e);
+        alert("儲存失敗！請確認你已在 Firebase 控制台將 Rules 設定為允許寫入。");
+      }
     };
 
     window.handleAddHomework = async (e) => {
@@ -226,20 +233,29 @@
         return;
       }
 
-      const hwCollection = collection(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks');
-      await addDoc(hwCollection, {
-        name: hwName,
-        createdAt: new Date().toISOString(),
-        statuses: {}
-      });
-      window.state.newHwName = '';
-      render();
+      try {
+        const hwCollection = collection(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks');
+        await addDoc(hwCollection, {
+          name: hwName,
+          createdAt: new Date().toISOString(),
+          statuses: {}
+        });
+        window.state.newHwName = '';
+        render();
+      } catch (e) {
+        console.error("新增失敗:", e);
+        alert("新增失敗！請確認你已在 Firebase 控制台將 Rules 設定為允許寫入。");
+      }
     };
 
     window.handleDeleteHomework = async (hwId) => {
       if (!window.state.user || !window.confirm("確定要刪除這項作業嗎？")) return;
-      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
-      await deleteDoc(hwRef);
+      try {
+        const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+        await deleteDoc(hwRef);
+      } catch (e) {
+        console.error("刪除失敗:", e);
+      }
     };
 
     window.startEditName = (hwId, currentName) => {
@@ -255,8 +271,12 @@
       render(); // 關閉編輯模式
 
       if (!window.state.user || !newName) return;
-      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
-      await updateDoc(hwRef, { name: newName });
+      try {
+        const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+        await updateDoc(hwRef, { name: newName });
+      } catch (e) {
+        console.error("修改失敗:", e);
+      }
     };
 
     window.handleEditKeyDown = (e, hwId) => {
@@ -275,10 +295,14 @@
       const currentStatus = hw.statuses[seatNo] || STATUS.NONE;
       const nextStatus = NEXT_STATUS[currentStatus];
       
-      const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
-      await updateDoc(hwRef, {
-        [`statuses.${seatNo}`]: nextStatus
-      });
+      try {
+        const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hwId);
+        await updateDoc(hwRef, {
+          [`statuses.${seatNo}`]: nextStatus
+        });
+      } catch (e) {
+        console.error("狀態切換失敗:", e);
+      }
     };
 
     window.handleResetAll = async () => {
@@ -286,9 +310,13 @@
       if (!window.confirm("⚠️ 警告：這將會清除「所有」的作業記錄！確定要繼續嗎？")) return;
       if (!window.confirm("真的確定嗎？資料刪除後無法復原。")) return;
 
-      for (const hw of window.state.homeworks) {
-        const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hw.id);
-        await deleteDoc(hwRef);
+      try {
+        for (const hw of window.state.homeworks) {
+          const hwRef = doc(db, 'artifacts', appId, 'users', window.state.user.uid, 'homeworks', hw.id);
+          await deleteDoc(hwRef);
+        }
+      } catch (e) {
+        console.error("重置失敗:", e);
       }
     };
 
@@ -301,10 +329,8 @@
       const s = window.state;
       const root = document.getElementById('app-root');
 
-      // 左側面板 HTML
       const leftPanelHtml = `
         <div class="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] p-6 flex flex-col gap-6 relative">
-          <!-- 班級設定 -->
           <div class="border-b-4 border-dotted border-gray-200 pb-6">
             <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
               <i data-lucide="users" class="w-6 h-6 text-[#bae1ff]"></i> 班級設定
@@ -328,7 +354,6 @@
             ` : ''}
           </div>
 
-          <!-- 作業查詢 -->
           <div>
             <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
               <i data-lucide="search" class="w-6 h-6 text-[#d4c4fb]"></i> 作業查詢
@@ -342,7 +367,6 @@
               </button>
             </div>
 
-            <!-- 查詢表單區塊 -->
             ${s.queryMode === 'seat' ? `
               <div class="bg-white/60 p-4 rounded-2xl border-4 border-dotted border-[#d4c4fb] mb-4">
                 <label class="block text-md text-gray-700 mb-2 font-bold">請輸入座號</label>
@@ -363,7 +387,6 @@
               </div>
             ` : ''}
 
-            <!-- 圖例 -->
             <div class="mt-6 pt-6 border-t-4 border-dotted border-gray-200">
               <h3 class="text-lg font-bold text-gray-700 mb-4">按鈕顏色圖例</h3>
               <div class="grid grid-cols-2 gap-4 text-md font-bold">
@@ -377,7 +400,6 @@
         </div>
       `;
 
-      // 右側面板邏輯與 HTML
       let displayedHomeworks = s.homeworks;
       let rightPanelHtml = '';
 
@@ -439,7 +461,6 @@
           </div>
         `;
       } else {
-        // 預設或週期查詢顯示 (卡片列表)
         let cardsHtml = '';
         if (displayedHomeworks.length === 0) {
           cardsHtml = `
@@ -502,7 +523,6 @@
 
         rightPanelHtml = `
           <div class="space-y-8">
-            <!-- 新增作業 -->
             <div class="bg-white/80 backdrop-blur-md rounded-[32px] shadow-sm border-4 border-dashed border-[#baffc9] p-6">
               <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
                 <i data-lucide="book-open" class="w-6 h-6 text-[#6ab882]"></i> 新增作業
@@ -516,7 +536,6 @@
               ${s.studentCount === 0 ? `<p class="mt-3 text-md text-red-500 font-bold">※ 請先在左側設定班級學生人數，才能新增作業。</p>` : ''}
             </div>
 
-            <!-- 週期查詢提示 -->
             ${s.queryMode === 'period' ? `
               <div class="bg-[#ffffba]/50 text-yellow-800 p-4 rounded-2xl font-bold text-md flex items-center gap-2 border-4 border-dashed border-[#ffffba]">
                 <i data-lucide="calendar" class="w-5 h-5"></i>
@@ -524,7 +543,6 @@
               </div>
             ` : ''}
 
-            <!-- 卡片列表 -->
             <div class="space-y-6">
               ${cardsHtml}
             </div>
@@ -532,7 +550,6 @@
         `;
       }
 
-      // 整體組合 HTML
       root.innerHTML = `
         <header class="bg-white/70 backdrop-blur-md border-b-4 border-dashed border-[#ffb3ba] sticky top-4 z-20 rounded-3xl mx-4 md:mx-auto max-w-6xl mt-4 shadow-sm">
           <div class="px-6 py-5">
@@ -569,9 +586,11 @@
         </button>
       `;
 
-      // 重新渲染 Lucide 圖標
       lucide.createIcons();
     };
+
+    // ⚠️ 關鍵修復：將 render 函數暴露到全域環境，讓 HTML 中的 onchange / oninput 可以順利呼叫它來更新畫面
+    window.render = render;
 
   </script>
 </body>
