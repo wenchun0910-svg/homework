@@ -415,34 +415,43 @@
       if (s.queryMode === 'seat' && s.querySeat) {
         const seatNoStr = s.querySeat.toString();
         
-        let trs = displayedHomeworks.map(hw => {
+        // --- 變更點 1：座號查詢時，只保留尚未完成的作業 (排除已交) ---
+        const uncompletedHomeworks = displayedHomeworks.filter(hw => {
+          const status = hw.statuses[seatNoStr] || STATUS.NONE;
+          return status !== STATUS.SUBMITTED;
+        });
+        
+        let trs = uncompletedHomeworks.map(hw => {
           const status = hw.statuses[seatNoStr] || STATUS.NONE;
           const statusClass = 
             status === STATUS.SUBMITTED ? 'bg-[#baffc9] text-green-800 border-[#8be09d]' :
             status === STATUS.CORRECTION ? 'bg-[#ffffba] text-yellow-800 border-[#e0e08b]' :
             status === STATUS.MISSING ? 'bg-[#ffb3ba] text-red-800 border-[#e08b96]' :
-            'bg-gray-100 text-gray-600 border-gray-200';
+            'bg-gray-100 text-gray-600 border-gray-200 hover:bg-[#bae1ff]';
             
           return `
             <tr class="hover:bg-white/60 transition-colors">
               <td class="p-5 font-bold text-gray-800">${hw.name}</td>
               <td class="p-5 text-gray-500">${new Date(hw.createdAt).toLocaleDateString('zh-TW')}</td>
               <td class="p-5">
-                <span class="px-4 py-2 text-md rounded-2xl font-bold border-2 ${statusClass}">${STATUS_LABEL[status]}</span>
+                <!-- 變更點 2：把標籤變成按鈕，在查詢模式下也能直接點擊更改狀態！ -->
+                <button onclick="handleToggleStudentStatus('${hw.id}', '${seatNoStr}')" class="px-4 py-2 text-md rounded-2xl font-bold border-2 transition-transform hover:scale-105 focus:outline-none shadow-sm ${statusClass}">
+                  ${STATUS_LABEL[status]}
+                </button>
               </td>
             </tr>
           `;
         }).join('');
 
-        if (displayedHomeworks.length === 0) {
-          trs = `<tr><td colspan="3" class="p-8 text-center text-gray-500 font-bold">目前沒有任何作業記錄</td></tr>`;
+        if (uncompletedHomeworks.length === 0) {
+          trs = `<tr><td colspan="3" class="p-8 text-center text-[#6ab882] font-bold text-xl">🎉 太棒了！該座號目前沒有未交或需訂正的作業</td></tr>`;
         }
 
         rightPanelHtml = `
           <div class="space-y-6">
             <div class="bg-[#d4c4fb]/30 text-purple-900 p-5 rounded-[32px] font-bold text-lg flex items-center gap-3 border-4 border-dashed border-[#d4c4fb]">
               <i data-lucide="search" class="w-6 h-6"></i>
-              正在查詢座號：<span class="text-2xl text-purple-700 bg-white/60 px-3 py-1 rounded-xl">${s.querySeat}</span> 號的作業狀況
+              正在查詢座號：<span class="text-2xl text-purple-700 bg-white/60 px-3 py-1 rounded-xl">${s.querySeat}</span> 號的未交與需訂正狀況
             </div>
             <div class="bg-white/80 backdrop-blur-sm rounded-[32px] shadow-sm border-4 border-dashed border-[#bae1ff] overflow-hidden">
               <table class="w-full text-left text-lg">
@@ -472,7 +481,17 @@
         } else {
           cardsHtml = displayedHomeworks.map(hw => {
             const seatsArray = Array.from({ length: s.studentCount }, (_, i) => i + 1);
-            const seatsHtml = seatsArray.map(seatNo => {
+            
+            // --- 變更點 3：週期查詢時，自動隱藏已經繳交完成的座號 ---
+            let filteredSeats = seatsArray;
+            if (s.queryMode === 'period') {
+              filteredSeats = seatsArray.filter(seatNo => {
+                const status = hw.statuses[seatNo] || STATUS.NONE;
+                return status !== STATUS.SUBMITTED;
+              });
+            }
+
+            const seatsHtml = filteredSeats.map(seatNo => {
               const status = hw.statuses[seatNo] || STATUS.NONE;
               return `
                 <button onclick="handleToggleStudentStatus('${hw.id}', '${seatNo}')" title="座號 ${seatNo}：${STATUS_LABEL[status]}" class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-all duration-300 ${STATUS_STYLE[status]} transform hover:scale-110 focus:outline-none shadow-sm hover:shadow-md">
@@ -480,6 +499,11 @@
                 </button>
               `;
             }).join('');
+
+            // 如果該項作業全班都交了，就顯示一個超棒的綠色打勾提示
+            const seatsDisplay = filteredSeats.length > 0 
+              ? `<div class="flex flex-wrap gap-4">${seatsHtml}</div>`
+              : `<div class="text-[#6ab882] font-bold text-xl flex items-center gap-2 p-4 bg-[#baffc9]/30 rounded-2xl w-fit border-2 border-dashed border-[#8be09d]"><i data-lucide="check-circle" class="w-6 h-6"></i> 全班皆已繳交完成！</div>`;
 
             const titleArea = s.editingHwId === hw.id ? `
               <div class="flex items-center gap-2 w-full">
@@ -512,9 +536,7 @@
                   </button>
                 </div>
                 <div class="p-6">
-                  <div class="flex flex-wrap gap-4">
-                    ${seatsHtml}
-                  </div>
+                  ${seatsDisplay}
                 </div>
               </div>
             `;
@@ -539,7 +561,7 @@
             ${s.queryMode === 'period' ? `
               <div class="bg-[#ffffba]/50 text-yellow-800 p-4 rounded-2xl font-bold text-md flex items-center gap-2 border-4 border-dashed border-[#ffffba]">
                 <i data-lucide="calendar" class="w-5 h-5"></i>
-                顯示 ${s.queryStartDate || '最早'} 到 ${s.queryEndDate || '最晚'} 的作業記錄
+                顯示 ${s.queryStartDate || '最早'} 到 ${s.queryEndDate || '最晚'} 的未交與需訂正記錄
               </div>
             ` : ''}
 
