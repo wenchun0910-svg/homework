@@ -17,7 +17,7 @@
 
     @font-face {
       font-family: 'Iansui';
-      src: url('https://cdn.jsdelivr.net/gh/ButTaiwan/iansui@master/Iansui-Regular.ttf') format('truetype');
+      src: url('https://cdn.jsdelivr.net/gh/ButTaiwan/iansui@master/webfont/Iansui-Regular.woff2') format('woff2');
       font-weight: normal;
       font-display: swap;
     }
@@ -89,24 +89,24 @@
     // =========================================================================
     // ⚠️ 第 1 步：這裡設定你的 Firebase 資料庫 (請替換為你從 Firebase 控制台取得的設定)
     // =========================================================================
-  const firebaseConfig = {
+    const myFirebaseConfig = {
   apiKey: "AIzaSyCVMsCHQyve4RI1uqPu89f39wpEsDnrAiw",
   authDomain: "homework-e9e3c.firebaseapp.com",
   projectId: "homework-e9e3c",
   storageBucket: "homework-e9e3c.firebasestorage.app",
   messagingSenderId: "1067149836853",
   appId: "1:1067149836853:web:38927516dd97d8ff38e77c"
-};
+    };
     // =========================================================================
 
     // (此處保留環境變數判斷，讓你在這個畫布中預覽也能正常運作，自己部署時會自動使用上方你填寫的設定)
-    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+    const myAppFirebaseConfig = typeof __firebase_config !== 'undefined' 
       ? JSON.parse(__firebase_config) 
       : myFirebaseConfig;
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'hw-checklist-app';
 
     // --- 初始化 Firebase ---
-    const app = initializeApp(firebaseConfig);
+    const app = initializeApp(myAppFirebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
